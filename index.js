@@ -11,7 +11,9 @@ function read(path) {
     })
   })
 }
-
+var id = function(x) {
+  return x;
+}
 var sleep = function(ms) {
   return new Promise((res, rej) => {
     setTimeout(resolve, ms);
@@ -55,9 +57,50 @@ IO.prototype.join = function() {
   return this.__value();
 }
 
+var Left = function(x) {
+  this.__value = x;
+}
+
+Left.of = function(x) {
+  return new Left(x);
+}
+
+Left.prototype.map = function(f) {
+  return this;
+}
+Left.prototype.join = function() {
+  return this.__value;
+}
+
+var Right = function(x) {
+  this.__value = x;
+}
+
+Right.of = function(x) {
+  return new Right(x);
+}
+
+Right.prototype.map = function(f) {
+  return Right.of(f(this.__value));
+}
+Right.prototype.toString = function() {
+  return `[Right: ${this.__value}]`;
+}
+Right.prototype.join = function() {
+  return this.__value;
+}
+
 var chain = R.curry(function(f, m){
   return m.map(f).join(); // 或者 compose(join, map(f))(m)
 });
+
+var map = R.curry(function(f, any_functor_at_all) {
+  return any_functor_at_all.map(f);
+});
+
+
+
+
 
 // safeProp :: 
 var safeProp = R.curry(function (x, o) { return Maybe.of(o[x]); });
@@ -67,18 +110,24 @@ var user = {
   address: {
     street: {
       number: 22,
-      name: ''
+      name: 'abc'
     }
   }
 };
 
 var ex1 = R.compose(chain(safeProp("name")), chain(safeProp("street")), safeProp("address"));
 var u = ex1(user);
-console.log(u)
+// console.log(u)
 
-var getFile = function() {
-  return new IO(function(){ return __filename; });
-}
+// var getFile = function() {
+//   return new IO(function(){ return __filename; });
+// }
+
+var readFile = function(filename) {
+  return new IO(function() {
+    return fs.readFileSync(filename, 'utf-8');
+  });
+};
 
 var pureLog = function(x) {
   return new IO(function(){
@@ -87,8 +136,18 @@ var pureLog = function(x) {
   });
 }
 
-var ex2 = R.compose(chain(pureLog), getFile);
+var ex2 = R.compose(chain(pureLog), readFile);
 
+// console.log(ex2);
+// console.log(ex2.__value);
+
+// console.log(ex2("index.js"));
+// console.log(ex2("index.js").__value());
+console.log("\n");
+// chain(function(txt) {
+//   console.log(txt);
+// }, ex2("index.js"))
+// chain(id, ex2("index.js"))
 // 练习 3
 // ==========
 // 使用 getPost() 然后以 post 的 id 调用 getComments()
@@ -111,16 +170,48 @@ var getComments = function(i) {
   });
 }
 
-var ex3 = R.curry(function(x) {
-  getPost(x).chain(function(res) {
-    return getComments(res.id);
-  })
-});
+getPost("123").chain(id);
+// var ex3 = R.curry(function(x) {
+//   getPost(x).chain(function(res) {
+//     return getComments(res.id);
+//   })
+// });
 // var ex3 = getPost(3).map((x) => {
 //   console.log(x);
 // })
 // ex3();
-(async function() {
-  await sleep(2000);
-  ex3();
-})
+// (async function() {
+//   await sleep(2000);
+//   ex3();
+// })
+
+//  addToMailingList :: Email -> IO([Email])
+var addToMailingList = (function(list){
+  return function(email) {
+    return new IO(function(){
+      list.push(email);
+      return list;
+    });
+  }
+})([]);
+
+function emailBlast(list) {
+  return new IO(function(){
+    return 'emailed: ' + list.join(',');
+  });
+}
+
+
+var validateEmail = function(x){
+  return x.match(/\S+@\S+\.\S+/) ? (new Right(x)) : (new Left('invalid email'));
+}
+
+//  ex4 :: Email -> Either String (IO String)
+var ex4 = R.compose(map(map(emailBlast)), map(addToMailingList), validateEmail);
+var ex5 = R.compose(id, validateEmail);
+var ex6 = R.compose(chain(emailBlast), map(addToMailingList), validateEmail);
+
+// console.log(validateEmail("a@a.com") instanceof Right)
+// console.log(ex4("a@a.com").__value.__value().__value());
+// console.log(ex5("a@a.com"));
+console.log(ex6("a@b"));
